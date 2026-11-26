@@ -8,8 +8,6 @@
     untuk GPU VRAM terbatas (4 GB) dan CPU‑only (ONNX Runtime).
   </p>
 
-  <!-- License badge -->
-  ![License](https://img.shields.io/github/license/Mahdanaa/soccer-cihuy)
 
 </div>
 
@@ -55,8 +53,8 @@ Gunakan lingkungan **Python ≥ 3.8**:
 
 ```bash
 # Clone repo
-git clone https://github.com/Mahdanaa/soccer-cihuy.git
-cd soccer-cihuy
+git clone https://github.com/Mahdanaa/Tracking-Soccer.git
+cd Tracking-Soccer
 
 # Optional: buat virtual environment (Windows)
 python -m venv .venv
