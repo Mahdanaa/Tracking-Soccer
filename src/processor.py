@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from src.config import OUTPUTS, REQUIRED, TEAM_MODES, Mode
 from src.core.team import prepare_team_classifier
+from src.device import resolve_device
 from src.models import ModelStore
 from src.modes import REGISTRY
 from src.modes.context import RunContext
@@ -24,18 +25,20 @@ class ProcessingResult:
     encode_seconds: float
     total_seconds: float
     warnings: tuple[str, ...]
+    device: str = "cpu"
+    device_label: str = "CPU"
+    backend: str = "ONNX Runtime / CPUExecutionProvider"
 
     @property
     def processing_fps(self) -> float:
         return self.frames_processed / self.process_seconds
 
 
-def process_video(input_path: Path, output_path: Path | None, mode: Mode | str, device: str = "cpu",
+def process_video(input_path: Path, output_path: Path | None, mode: Mode | str, device: str = "auto",
                   progress_callback: Callable[[str, int, int], None] | None = None) -> ProcessingResult:
     start = perf_counter()
     mode = Mode(mode)
-    if device != "cpu":
-        raise ValueError("This application supports CPU inference only.")
+    runtime = resolve_device(device)
     source = Path(input_path).resolve()
     target = (Path(output_path) if output_path else OUTPUTS / f"{mode.value.lower()}-{uuid4().hex}.mp4").resolve()
     if target == source:
@@ -51,15 +54,16 @@ def process_video(input_path: Path, output_path: Path | None, mode: Mode | str, 
     with output_files(target) as (intermediate, encoded):
         notify("Preparing models")
         load_start = perf_counter()
-        models = ModelStore()
+        models = ModelStore(runtime=runtime)
         for name in REQUIRED[mode]:
             models.load(name)
+        warnings.extend(models.warnings)
         load_seconds = perf_counter() - load_start
         run = RunContext(models, info.fps)
         if mode in TEAM_MODES:
             notify("Preparing team classifier")
             prepare_start = perf_counter()
-            run.teams, warning = prepare_team_classifier(source, info, models)
+            run.teams, warning = prepare_team_classifier(source, info, models, device=runtime.torch_device)
             prepare_seconds = perf_counter() - prepare_start
             if warning:
                 warnings.append(warning)
@@ -84,5 +88,15 @@ def process_video(input_path: Path, output_path: Path | None, mode: Mode | str, 
         encode_seconds = perf_counter() - encode_start
     notify("Completed", count)
     warnings.extend(f"{reason} on {number} of {count} frames." for reason, number in run.warnings.items())
+    actual_provider = models.active_provider()
+    actual_device = runtime.kind
+    actual_label = runtime.label
+    actual_backend = f"ONNX Runtime / {actual_provider}"
+    if mode in TEAM_MODES:
+        actual_backend = f"{actual_backend} + PyTorch {runtime.torch_device.upper()}"
+    if actual_provider == "CPUExecutionProvider" and runtime.onnx_provider != "CPUExecutionProvider":
+        actual_device = "cpu" if runtime.torch_device == "cpu" else runtime.kind
+        actual_label = "CPU (fallback)" if runtime.torch_device == "cpu" else f"{runtime.label} (ONNX CPU fallback)"
     return ProcessingResult(target, mode, count, load_seconds, prepare_seconds, process_seconds,
-                            encode_seconds, perf_counter() - start, tuple(warnings))
+                            encode_seconds, perf_counter() - start, tuple(warnings),
+                            actual_device, actual_label, actual_backend)

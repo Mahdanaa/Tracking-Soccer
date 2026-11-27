@@ -9,6 +9,7 @@ import numpy as np
 
 from src.core.annotations import draw_landmarks
 from src.core.pitch import PITCH, detect_pitch
+from src.device import SUPPORTED_DEVICES, resolve_device
 from src.models import CONTRACTS, ModelStore
 from src.video import iter_frames
 
@@ -17,12 +18,17 @@ def main():
     parser = argparse.ArgumentParser(description="Inspect the actual ONNX sessions and run inference.")
     parser.add_argument("--video", required=True, type=Path)
     parser.add_argument("--landmarks", type=Path, help="Save a labeled PNG for visual inspection.")
+    parser.add_argument("--device", choices=list(SUPPORTED_DEVICES), default="auto")
     args = parser.parse_args()
     with closing(iter_frames(args.video.resolve())) as frames:
         frame = next(frames, None)
     if frame is None:
         raise ValueError("No decodable frame in the supplied video.")
-    models = ModelStore()
+    runtime = resolve_device(args.device)
+    print(f"Resolved device: {runtime.label} ({runtime.backend})")
+    if runtime.hint:
+        print(f"Hint: {runtime.hint}")
+    models = ModelStore(runtime=runtime)
     for name in CONTRACTS:
         result = models.predict(name, frame)
         path = models.directory / f"football-{name}-detection.onnx"

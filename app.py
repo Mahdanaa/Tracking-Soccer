@@ -7,6 +7,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src.config import OUTPUTS, SAMPLES, UPLOAD_MB, Mode
+from src.device import resolve_device
 from src.modes import REGISTRY
 from src.processor import process_video
 from src.video import read_video_info
@@ -20,6 +21,11 @@ DESCRIPTIONS = {
     Mode.RADAR: "Project tracked people onto a two-dimensional pitch.",
     Mode.FULL_MATCH_ANALYSIS: "Combine team tracking and radar with a dedicated ball detector and trail.",
 }
+
+
+@st.cache_resource
+def detected_runtime():
+    return resolve_device("auto")
 
 
 def label(mode):
@@ -69,14 +75,17 @@ def main():
                 st.caption(f"{name} · {info.width} × {info.height} · {info.fps:g} FPS · {duration}")
             except (OSError, ValueError) as error:
                 st.error(str(error))
+    runtime = detected_runtime()
     with right:
         modes = list(REGISTRY)
         mode = st.selectbox("Analysis mode", modes, index=modes.index(Mode.PLAYER_TRACKING), format_func=label)
         st.write(DESCRIPTIONS[mode])
-        st.caption("Device · CPU")
+        st.caption(f"Device · Auto ({runtime.label})")
+        if runtime.hint:
+            st.caption(runtime.hint)
         start = st.button("Start Analysis", type="primary", disabled=info is None)
 
-    key = (path, path.stat().st_mtime_ns if info else None, mode, "cpu")
+    key = (path, path.stat().st_mtime_ns if info else None, mode, runtime.key)
     if "result" in st.session_state and (st.session_state.result[0] != key or start):
         st.session_state.result[1].output_path.unlink(missing_ok=True)
         del st.session_state.result
@@ -93,7 +102,7 @@ def main():
 
         try:
             target = directory / f"{mode.value.lower()}-{uuid4().hex}.mp4"
-            result = process_video(path, target, mode, progress_callback=update)
+            result = process_video(path, target, mode, device="auto", progress_callback=update)
             st.session_state.result = (key, result)
         except Exception as error:
             logging.exception("Analysis failed")
@@ -111,7 +120,7 @@ def main():
             st.subheader(f"{label(result.mode)} result")
             st.video(str(result.output_path))
             st.write(f"{result.frames_processed} frames · {result.total_seconds:.2f} s total · "
-                     f"{result.processing_fps:.2f} processing FPS")
+                     f"{result.processing_fps:.2f} processing FPS · {result.device_label}")
             for warning in result.warnings:
                 st.warning(warning)
             stem = re.sub(r"[^\w.-]", "_", Path(name).stem)

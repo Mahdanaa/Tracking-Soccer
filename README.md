@@ -1,6 +1,6 @@
 <div align="center">
   <h1>⚽ Soccer Tracking</h1>
-  <p>Deteksi pemain, pelacakan bola, dan minimap pertandingan sepak bola. Aplikasi Streamlit ini menjalankan tiga model ONNX secara lokal di CPU.</p>
+  <p>Deteksi pemain, pelacakan bola, dan minimap pertandingan sepak bola. Aplikasi Streamlit ini menjalankan tiga model ONNX secara lokal dengan deteksi otomatis GPU (CUDA / ROCm / Apple Silicon / Windows ML) atau fallback ke CPU.</p>
 </div>
 
 ---
@@ -30,6 +30,7 @@ Tracking-Soccer/
 ├── src/
 │   ├── __init__.py
 │   ├── config.py                             # Path, pilihan mode, warna, dan ambang
+│   ├── device.py                             # Deteksi otomatis GPU (CUDA/ROCm/MPS/Windows ML) atau CPU
 │   ├── models.py                             # Memuat dan memvalidasi model ONNX
 │   ├── processor.py                          # Menjalankan analisis dan melaporkan progres
 │   ├── video.py                              # Membaca frame dan menulis output H.264
@@ -64,6 +65,7 @@ Tracking-Soccer/
 │       ├── __init__.py
 │       └── soccer.py                         # Menggambar lapangan dan titik di minimap
 ├── scripts/
+│   ├── setup_env.py                          # Instalasi dependensi otomatis sesuai hardware (GPU/CPU)
 │   └── check_models.py                       # Diagnostik model dengan satu frame video
 └── examples/
     └── soccer/
@@ -97,7 +99,22 @@ py -3.14 -m venv .venv
 
 Jika memakai `python` langsung, perintah untuk langkah terakhir adalah `python -m venv .venv`. Jalankan perintah selanjutnya dari folder yang berisi `app.py`.
 
-### 3. Instal dependensi
+### 3. Instal dependensi (otomatis menyesuaikan GPU/CPU)
+
+Jalankan skrip setup berikut agar paket disesuaikan otomatis dengan perangkat Anda:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.setup_env
+```
+
+Skrip ini mendeteksi hardware secara otomatis:
+- **NVIDIA GPU (Windows/Linux):** memasang PyTorch CUDA dan `onnxruntime-gpu[cuda]`.
+- **AMD GPU (Linux ROCm):** memasang PyTorch ROCm dan ONNX Runtime.
+- **Apple Silicon (macOS arm64):** memasang PyTorch MPS dan ONNX Runtime CoreML.
+- **Windows 11 24H2+ (AMD/Intel/Qualcomm GPU):** memasang `onnxruntime-windowsml` dan PyTorch CPU.
+- **Perangkat tanpa GPU yang didukung:** memasang konfigurasi CPU universal.
+
+Jika ingin memasang versi **CPU saja** secara manual, jalankan:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -106,7 +123,7 @@ Jika memakai `python` langsung, perintah untuk langkah terakhir adalah `python -
 
 Perintah di atas langsung memakai Python dari `.venv`, jadi bisa dijalankan tanpa mengaktifkan environment. Untuk mengaktifkannya di PowerShell, jalankan `.\.venv\Scripts\Activate.ps1`. Setelah itu, Anda bisa memakai `python` sebagai pengganti `.\.venv\Scripts\python.exe`.
 
-`requirements.txt` sudah memasang Streamlit, ONNX Runtime, OpenCV, dan `imageio-ffmpeg` untuk ekspor MP4.
+Dependensi proyek sudah mencakup Streamlit, ONNX Runtime, OpenCV, dan `imageio-ffmpeg` untuk ekspor MP4.
 
 ### 4. Masukkan model ONNX dan siapkan video
 
@@ -140,7 +157,7 @@ Jalankan sekali untuk memakai **Team Classification**, **Radar**, atau **Full Ma
 
 1. Buka alamat lokal yang tercetak di terminal, biasanya `http://localhost:8501`.
 2. Pilih **Upload** untuk mengunggah MP4 atau **Sample** untuk memilih video dari `samples/`. Batas unggahan adalah **200 MB**.
-3. Untuk percobaan pertama, pilih **Player Tracking** dan gunakan klip pendek. Klik **Start Analysis**.
+3. Aplikasi otomatis memilih device terbaik (`Auto (GPU ...)` atau `Auto (CPU)`) tanpa perlu dipilih manual. Untuk percobaan pertama, pilih **Player Tracking** dan gunakan klip pendek. Klik **Start Analysis**.
 4. Setelah proses selesai, putar hasilnya di Streamlit atau klik **Download result** untuk menyimpan MP4. Video hasil memakai H.264 tanpa audio.
 5. Tekan **Ctrl+C** di terminal untuk menghentikan server.
 
@@ -170,7 +187,7 @@ Simpan MP4 sebagai `samples/pertandingan.mp4`, atau ganti nilai `--source_video_
   --no_preview
 ```
 
-Gunakan nama output baru setiap analisis. Hapus `--no_preview` untuk membuka preview setelah proses selesai. Untuk melihat nama mode dan argumen lainnya, jalankan `.\.venv\Scripts\python.exe -m examples.soccer.main --help`.
+Gunakan nama output baru setiap analisis. Secara default CLI memakai `--device auto` (deteksi GPU/CPU otomatis); tambahkan `--device cpu` jika ingin memaksa CPU. Hapus `--no_preview` untuk membuka preview setelah proses selesai. Untuk melihat nama mode dan argumen lainnya, jalankan `.\.venv\Scripts\python.exe -m examples.soccer.main --help`.
 
 ---
 
@@ -186,7 +203,7 @@ Jika video sudah ada di `samples/pertandingan.mp4`, perintah berikut memuat keti
 |---|---|
 | Model ONNX gagal dimuat | Cek nama berkas di `models/`. Diagnosis akan menunjukkan lokasi berkas dan konfigurasi yang diharapkan. |
 | Cache SigLIP belum lengkap | Ulangi perintah `hf download` dan pastikan cache diisi oleh akun Windows yang menjalankan aplikasi. |
-| Analisis CPU terasa lambat | Mulai dari klip pendek dengan Player Tracking. Full Match Analysis menjalankan model pemain, lapangan, dan beberapa potongan untuk deteksi bola pada setiap frame. |
+| Analisis terasa lambat / masih berjalan di CPU | Pastikan paket GPU terpasang dengan menjalankan `python -m scripts.setup_env`. Pada perangkat tanpa GPU, mulai dari klip pendek dengan Player Tracking karena Full Match Analysis menjalankan 3 model dan beberapa potongan bola pada setiap frame. |
 | Video gagal diputar atau disimpan | Pastikan MP4 masukan bisa didekode dan ada ruang tulis untuk berkas sementara di `outputs/`. |
 
 ---
@@ -196,3 +213,4 @@ Jika video sudah ada di `samples/pertandingan.mp4`, perintah berikut memuat keti
 Model pemain, bola, dan lapangan merupakan hasil fine-tuning tim dari dataset Roboflow Universe. [Players v10](https://universe.roboflow.com/roboflow-jvuqo/football-players-detection-3zvbc) · [Ball v2](https://universe.roboflow.com/roboflow-jvuqo/football-ball-detection-rejhg) · [Field v12](https://universe.roboflow.com/roboflow-jvuqo/football-field-detection-f07vi)
 
 Atribusi Roboflow Sports dan lisensi MIT kode proyek tercantum di `LICENSE`. Model YOLOv8s tim mencantumkan AGPL-3.0 dalam metadata. SigLIP memakai Apache-2.0. Periksa lisensi dataset dan hak distribusi rekaman sebelum membagikan video. [Lisensi proyek](LICENSE) · [Ultralytics](https://www.ultralytics.com/license) · [SigLIP](https://huggingface.co/google/siglip-base-patch16-224)
+  

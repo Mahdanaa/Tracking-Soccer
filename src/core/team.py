@@ -27,7 +27,7 @@ def player_crops(frame, detections, indices):
             yield index, frame[y1:y2, x1:x2]
 
 
-def prepare_team_classifier(path: Path, info: VideoInfo, models: ModelStore):
+def prepare_team_classifier(path: Path, info: VideoInfo, models: ModelStore, device: str | None = None):
     # Reservoir sampling bounds memory while representing later camera positions too.
     stride = max(1, min(TEAM_STRIDE, info.frames // 5), info.frames // 100)
     crops = []
@@ -49,7 +49,9 @@ def prepare_team_classifier(path: Path, info: VideoInfo, models: ModelStore):
 
     from sports.common.team import TeamClassifier
 
-    classifier = TeamClassifier(device="cpu", batch_size=16)
+    target_device = device or (models.runtime.torch_device if models is not None else "cpu")
+    batch_size = 32 if target_device != "cpu" else 16
+    classifier = TeamClassifier(device=target_device, batch_size=batch_size)
     classifier.fit(crops)
     if np.unique(classifier.cluster_model.labels_).size < 2:
         return TeamState(None), "Only one distinct cluster in the sample; teams are Unknown."

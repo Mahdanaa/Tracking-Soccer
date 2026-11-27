@@ -7,6 +7,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.config import Mode
+from src.device import SUPPORTED_DEVICES
 from src.processor import process_video
 
 
@@ -14,12 +15,12 @@ def main():
     parser = argparse.ArgumentParser(description="Process a match with the Streamlit analysis pipeline.")
     parser.add_argument("--source_video_path", type=Path, required=True)
     parser.add_argument("--target_video_path", type=Path, required=True)
-    parser.add_argument("--device", choices=["cpu", "auto"], default="cpu")
+    parser.add_argument("--device", choices=list(SUPPORTED_DEVICES), default="auto")
     parser.add_argument("--mode", type=Mode, choices=list(Mode), default=Mode.RADAR)
     parser.add_argument("--no_preview", action="store_true")
     args = parser.parse_args()
-    result = process_video(args.source_video_path, args.target_video_path, args.mode, device="cpu")
-    print(f"{result.frames_processed} frames in {result.total_seconds:.2f}s: {result.output_path}")
+    result = process_video(args.source_video_path, args.target_video_path, args.mode, device=args.device)
+    print(f"{result.frames_processed} frames in {result.total_seconds:.2f}s ({result.device_label}): {result.output_path}")
     for warning in result.warnings:
         print(warning)
     if not args.no_preview:

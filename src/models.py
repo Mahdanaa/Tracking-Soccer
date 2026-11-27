@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from src.config import BALL_CONFIDENCE, CLASS_NAMES, CONFIDENCE, IMAGE_SIZE, MODEL_DIR, MODEL_IOU
+from src.device import RuntimeDevice, preload_gpu_libraries, resolve_device
 
 CONTRACTS = {
     "player": ("detect", CLASS_NAMES, 8),
@@ -12,7 +13,7 @@ CONTRACTS = {
 }
 
 
-def validate_session(name, session) -> dict:
+def validate_session(name, session, runtime: RuntimeDevice | None = None) -> dict:
     task, names, channels = CONTRACTS[name]
     inputs, outputs = session.get_inputs(), session.get_outputs()
     metadata = session.get_modelmeta().custom_metadata_map
@@ -31,17 +32,30 @@ def validate_session(name, session) -> dict:
         if ast.literal_eval(metadata["kpt_names"]) != expected_order:
             raise ValueError("Pitch keypoint order differs from the verified team export.")
     providers = session.get_providers()
-    if providers != ["CPUExecutionProvider"]:
-        raise RuntimeError(f"Unexpected inference providers: {providers}")
+    expected = runtime.onnx_provider if runtime else "CPUExecutionProvider"
+    strict = runtime.strict if runtime else True
+    warning = None
+    if not providers:
+        raise RuntimeError(f"{name}: ONNX Runtime session has no active providers.")
+    if expected == "CPUExecutionProvider":
+        if providers != ["CPUExecutionProvider"]:
+            raise RuntimeError(f"Unexpected inference providers: {providers}")
+    elif expected != "WindowsML" and expected not in providers:
+        if strict:
+            raise RuntimeError(f"Requested {expected}, but ONNX Runtime fell back to {providers}.")
+        warning = f"ONNX {name} fell back to {providers[0]} instead of {expected}."
     return {"input": inputs[0].shape, "output": outputs[0].shape, "dtype": inputs[0].type,
-            "providers": providers, "metadata": metadata}
+            "providers": providers, "metadata": metadata, "warning": warning}
 
 
 class ModelStore:
-    def __init__(self, directory: Path = MODEL_DIR):
+    def __init__(self, directory: Path = MODEL_DIR, runtime: RuntimeDevice | None = None):
         self.directory = directory.resolve()
+        self.runtime = runtime or resolve_device("auto")
         self.predictors = {}
         self.details = {}
+        self.warnings = []
+        self._preloaded = False
 
     def load(self, name: str):
         if name in self.predictors:
@@ -49,19 +63,29 @@ class ModelStore:
         path = self.directory / f"football-{name}-detection.onnx"
         if not path.is_file():
             raise FileNotFoundError(f"Place the original {name} model at {path}")
+        if not self._preloaded:
+            preload_gpu_libraries(self.runtime)
+            self._preloaded = True
         from ultralytics.models.yolo.detect import DetectionPredictor
         from ultralytics.models.yolo.pose import PosePredictor
 
         task = CONTRACTS[name][0]
         predictor_type = PosePredictor if task == "pose" else DetectionPredictor
         confidence = BALL_CONFIDENCE if name == "ball" else CONFIDENCE
-        options = dict(task=task, model=str(path), device="cpu", imgsz=IMAGE_SIZE, batch=1,
+        options = dict(task=task, model=str(path), device=self.runtime.onnx_device, imgsz=IMAGE_SIZE, batch=1,
                        rect=False, conf=confidence, iou=MODEL_IOU, verbose=False, save=False)
         predictor = predictor_type(overrides=options)
         predictor.setup_model(str(path), verbose=False)
-        self.details[name] = validate_session(name, predictor.model.session)
+        details = validate_session(name, predictor.model.session, self.runtime)
+        if details["warning"]:
+            self.warnings.append(details["warning"])
+        self.details[name] = details
         self.predictors[name] = predictor
         return predictor
+
+    def active_provider(self) -> str:
+        providers = [info["providers"][0] for info in self.details.values() if info.get("providers")]
+        return providers[0] if providers else self.runtime.onnx_provider
 
     def predict(self, name: str, frame: np.ndarray):
         return self.load(name)(source=frame)[0]
