@@ -46,8 +46,12 @@ def draw_landmarks(scene, points):
 
 def overlay_minimap(scene, radar):
     height, width = scene.shape[:2]
-    size = (max(1, width // 2), max(1, height // 2))
-    small = cv2.resize(radar, size, interpolation=cv2.INTER_AREA)
-    region = scene[-size[1]:, (width - size[0]) // 2:(width - size[0]) // 2 + size[0]]
-    cv2.addWeighted(small, 0.5, region, 0.5, 0, dst=region)
+    scale = min(width * 0.28 / radar.shape[1], height * 0.28 / radar.shape[0])
+    w = max(1, min(width, round(radar.shape[1] * scale)))
+    h = max(1, min(height, round(radar.shape[0] * scale)))
+    small = cv2.resize(radar, (w, h), interpolation=cv2.INTER_AREA)
+    margin = min(max(12, round(min(width, height) * 0.02)), width - w, height - h)
+    y2, x2 = height - margin, width - margin
+    region = scene[y2 - h:y2, x2 - w:x2]
+    cv2.addWeighted(small, 0.75, region, 0.25, 0, dst=region)
     return scene
