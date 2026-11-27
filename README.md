@@ -173,7 +173,7 @@ Jalankan sekali untuk memakai **Team Classification**, **Radar**, atau **Full Ma
 | **Radar** | Menampilkan ID dan warna tim, serta memetakan posisi pemain ke minimap. |
 | **Full Match Analysis** | Menjalankan Radar sekaligus menampilkan jejak bola dan posisi bola pada minimap. |
 
-Jika kalibrasi lapangan gagal pada satu frame, Radar dan Full Match Analysis menyembunyikan minimap untuk frame itu. Ringkasan Streamlit mencatat jumlah frame yang terdampak.
+Mode Radar dan Full Match Analysis menstabilkan kalibrasi lapangan antarframe dan mempertahankan proyeksi terakhir saat kamera bergerak cepat agar minimap tampil mulus tanpa berkedip.
 
 ### Alternatif melalui terminal
 
