@@ -1,86 +1,109 @@
 <div align="center">
-
   <h1>⚽ Soccer Tracking</h1>
-
-  <p>
-    Kustomisasi dan optimasi modul analisis sepak bola berbasis
-    <a href="https://github.com/roboflow/sports"><strong>roboflow/sports</strong></a>
-    untuk GPU VRAM terbatas (4 GB) dan CPU‑only (ONNX Runtime).
-  </p>
-
-
+  <p>Deteksi pemain, pelacakan bola, dan minimap pertandingan sepak bola. Aplikasi Streamlit ini menjalankan tiga model ONNX secara lokal dengan deteksi otomatis GPU (CUDA / ROCm / Apple Silicon / Windows ML) atau fallback ke CPU.</p>
 </div>
 
 ---
 
-## 🔗 Referensi Project Awal
+## 🔗 Referensi proyek
 
-Repository ini merupakan pengembangan/turunan dari project open‑source **[roboflow/sports](https://github.com/roboflow/sports)** oleh **Roboflow**. Seluruh core library (`sports/`), konfigurasi lapangan, dan dataset awal merujuk pada repository upstream tersebut.
+Proyek ini mengadaptasi Roboflow Sports untuk menganalisis rekaman pertandingan dan mengekspor hasilnya sebagai video MP4. Kode pendukung Roboflow ada di `sports/`, sedangkan alur analisis aplikasi ada di `src/`. [Roboflow Sports](https://github.com/roboflow/sports)
 
 ---
 
-## 📂 Folder Structure
+## 📂 Struktur folder
 
-```text
+```text ad
 Tracking-Soccer/
-├─ main.py                     # Entry point utama (CLI) – contoh A & B
-├─ sports/                     # Core library (fork dari roboflow/sports)
-├─ examples/
-│   └─ soccer/
-│       ├─ main_fast.py        # Runner teroptimasi untuk GPU (VRAM ≈ 4 GB)
-│       ├─ main_onnx.py        # Runner ringan untuk CPU/ONNX
-│       ├─ setup.sh            # Skrip download model .onnx/.pt
-│       ├─ requirements.txt    # Dependensi khusus contoh
-│       ├─ config.py           # Parameter default (path data, threshold, dll.)
-│       ├─ README.md           # Penjelasan singkat contoh & cara pakai
-│       ├─ data/               # Video contoh & model (git‑ignored)
-│       └─ notebooks/          # Jupyter notebooks untuk training model
-├─ check_env.py                # Skrip diagnostik environment lokal
-├─ PANDUAN_RETRAINING_KAGGLE_ONNX.md
-├─ setup.py                    # File setup standar setuptools
-├─ LICENSE                     # Lisensi MIT (lihat bagian Lisensi)
-├─ README.md
-└─ .gitignore
+├── app.py                                    # Antarmuka Streamlit
+├── requirements.txt                          # Versi dependensi aplikasi
+├── setup.py                                  # Metadata paket Python sports
+├── README.md                                 # Panduan instalasi dan penggunaan
+├── LICENSE                                   # Lisensi kode proyek
+├── .gitignore                                # Aturan untuk berkas lokal dan hasil analisis
+├── models/
+│   └── .gitkeep                              # Tempat tiga model ONNX dari tim
+├── samples/
+│   └── .gitkeep                              # Tempat video MP4 untuk pilihan Sample
+├── outputs/
+│   └── .gitkeep                              # Tempat hasil MP4 dan berkas sementara
+├── src/
+│   ├── __init__.py
+│   ├── config.py                             # Path, pilihan mode, warna, dan ambang
+│   ├── device.py                             # Deteksi otomatis GPU (CUDA/ROCm/MPS/Windows ML) atau CPU
+│   ├── models.py                             # Memuat dan memvalidasi model ONNX
+│   ├── processor.py                          # Menjalankan analisis dan melaporkan progres
+│   ├── video.py                              # Membaca frame dan menulis output H.264
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── player.py                         # Deteksi manusia dan ID ByteTrack
+│   │   ├── ball.py                           # Deteksi, pelacakan, dan jejak bola
+│   │   ├── pitch.py                          # Deteksi landmark dan proyeksi minimap
+│   │   ├── team.py                           # Pengelompokan pemain dan kiper berdasarkan tim
+│   │   └── annotations.py                    # Kotak, label, ID, dan overlay pada video
+│   └── modes/
+│       ├── __init__.py                       # Menghubungkan nama mode ke fungsi pemrosesan
+│       ├── context.py                        # Data dan peringatan untuk satu analisis
+│       ├── pitch_detection.py
+│       ├── player_detection.py
+│       ├── ball_detection.py
+│       ├── player_tracking.py
+│       ├── team_classification.py
+│       ├── radar.py
+│       └── full_match_analysis.py
+├── sports/
+│   ├── __init__.py
+│   ├── common/
+│   │   ├── __init__.py
+│   │   ├── ball.py                           # Tracker dan jejak bola
+│   │   ├── team.py                           # Ekstraksi fitur jersey dengan SigLIP dan clustering
+│   │   └── view.py                           # Transformasi perspektif kamera
+│   ├── configs/
+│   │   ├── __init__.py
+│   │   └── soccer.py                         # Dimensi lapangan dan definisi 32 landmark
+│   └── annotators/
+│       ├── __init__.py
+│       └── soccer.py                         # Menggambar lapangan dan titik di minimap
+├── scripts/
+│   ├── setup_env.py                          # Instalasi dependensi otomatis sesuai hardware (GPU/CPU)
+│   └── check_models.py                       # Diagnostik model dengan satu frame video
+└── examples/
+    └── soccer/
+        └── main.py                           # Menjalankan analisis lewat terminal
 ```
 
-Folder `examples/soccer/data/` tidak termasuk dalam Git karena berisi file model (.pt > 130 MB) dan video berukuran besar. Unduh model melalui `setup.sh` atau latih model Anda sendiri.
+Git membawa `.gitkeep` agar folder `models/`, `samples/`, dan `outputs/` tersedia setelah clone. Simpan model, video masukan, dan hasil analisis di folder lokal masing-masing. Langkah instalasi di bawah akan membuat `.venv/` untuk Python dan library proyek.
 
 ---
 
-## 💻 Instalasi
+## 💻 Instalasi setelah clone
 
-Gunakan lingkungan **Python ≥ 3.8**:
+### 1. Siapkan Git dan Python
+
+Gunakan **Windows x64 dan Python 3.14** untuk mengikuti perintah PowerShell di bawah. Setup proyek telah diuji pada Windows 11 dengan Python 3.14.5. Koneksi internet dibutuhkan untuk mengunduh dependensi dan menyiapkan cache SigLIP.
+
+```powershell
+git --version
+py -3.14 --version
+```
+
+Jika `py` belum tersedia, jalankan `python --version`. Jika hasilnya Python 3.14, gunakan `python` untuk membuat virtual environment pada langkah 2. Unduh Git atau Python jika belum terpasang. [Git](https://git-scm.com/downloads) · [Python](https://www.python.org/downloads/)
+
+### 2. Clone dan buat virtual environment
 
 ```bash
-# Clone repo
-git clone https://github.com/Mahdanaa/Tracking-Soccer.git
-cd Tracking-Soccer
-
-# Optional: buat virtual environment (Windows)
-python -m venv .venv
-.venv\Scripts\activate
-
-# Instalasi paket utama (memanggil setup.py)
+git clone https://github.com/Mahdanaa/soccer-cihuy.git
+cd soccer-cihuy
 pip install -e .
-# atau alternatif klasik
-# python setup.py install
-
-# Instalasi dependensi contoh
 pip install -r examples/soccer/requirements.txt
 ```
 
-> **Catatan**
+> [!NOTE]
 > Jika ingin menjalankan `main_onnx.py`, pastikan `onnxruntime` sudah terpasang (`pip install onnxruntime`).
 
 ### Cek Kesiapan Environment
 
-`check_env.py` memverifikasi:
-- Versi Python dan pip
-- Ketersediaan driver NVIDIA (`nvidia-smi`)
-- Instalasi PyTorch & CUDA (jika ada GPU)
-- Keberadaan model contoh & video sampel
-
-Jalankan skrip diagnostik sebelum memproses video:
+Jalankan skrip pengecekan sebelum memproses video:
 
 ```bash
 python check_env.py
@@ -90,95 +113,43 @@ python check_env.py
 
 ## 🚀 Cara Menjalankan
 
-> **Penting**
-> Folder `examples/soccer/data/` tidak ikut di‑commit ke GitHub karena ukuran file model `.pt` (> 130 MB) dan video sampel cukup besar. Unduh model bawaan melalui `examples/soccer/setup.sh` atau latih model `.onnx` sendiri mengikuti [PANDUAN_RETRAINING_KAGGLE_ONNX.md](PANDUAN_RETRAINING_KAGGLE_ONNX.md).
+> [!IMPORTANT]
+> Folder `examples/soccer/data/` tidak ikut di-commit ke GitHub karena ukuran file model `.pt` (`> 130 MB`) dan video sampel cukup besar. Unduh model bawaan melalui `examples/soccer/setup.sh` atau latih model `.onnx` sendiri mengikuti [PANDUAN_RETRAINING_KAGGLE_ONNX.md](PANDUAN_RETRAINING_KAGGLE_ONNX.md).
 
-### 1. `main.py` – Entry point utama
+### 1. Mode GPU Teroptimasi (`main_fast.py` — `.pt`)
 
-`main.py` menyediakan antarmuka CLI yang menerima argumen `--source_video_path`, `--target_video_path`, `--mode`, dan opsi tambahan seperti `--no_preview`. Dua mode yang paling sering dipakai adalah:
-
-#### A. Mode 1 – **Tracking + Warna Tim** (`TEAM_CLASSIFICATION`)
+Cocok untuk laptop/PC dengan GPU NVIDIA VRAM ~4 GB:
 
 ```bash
-python main.py \
-  --source_video_path data/2e57b9_0.mp4 \
-  --target_video_path data/out-team.mp4 \
-  --mode TEAM_CLASSIFICATION \
-  --no_preview
-```
-*Menandai pemain berdasarkan tim (warna seragam) dan menuliskan label tim pada tiap pemain dalam video output.*
-
-#### B. Mode 2 – **Tracking + Warna Tim + Radar 2D** (`RADAR`)
-
-```bash
-python main.py \
-  --source_video_path data/2e57b9_0.mp4 \
-  --target_video_path data/out-radar.mp4 \
-  --mode RADAR \
-  --no_preview
-```
-*Selain menandai tim, menambahkan visualisasi radar 2‑dimensi yang menunjukkan posisi relatif pemain di lapangan.*
-
----
-
-### 2. Mode GPU Teroptimasi (`main_fast.py` — `.pt`)
-
-Cocok untuk laptop/PC dengan GPU NVIDIA VRAM ≈ 4 GB:
-
-```bash
-python examples/soccer/main_fast.py \
-  --source_video_path examples/soccer/data/08fd33_4.mp4 \
-  --target_video_path examples/soccer/data/out-fast-radar.mp4 \
-  --device cuda \
-  --mode RADAR \
-  --imgsz 960 \
+python examples/soccer/main_fast.py `
+  --source_video_path examples/soccer/data/08fd33_4.mp4 `
+  --target_video_path examples/soccer/data/out-fast-radar.mp4 `
+  --device cuda `
+  --mode RADAR `
+  --imgsz 960 `
   --no_preview
 ```
 
-### 3. Mode Ringan CPU / ONNX (`main_onnx.py` — `.onnx`)
+### 2. Mode Ringan CPU / ONNX (`main_onnx.py` — `.onnx`)
 
-Membutuhkan tiga file model di `examples/soccer/data/`:
+Membutuhkan 3 file model di `examples/soccer/data/`:
+
 - `football-player-detection.onnx`
 - `football-pitch-detection.onnx`
 - `football-ball-detection.onnx`
 
+Jalankan dengan:
+
 ```bash
-python examples/soccer/main_onnx.py \
-  --source_video_path examples/soccer/data/2e57b9_0.mp4 \
-  --target_video_path examples/soccer/data/out-onnx-radar.mp4 \
-  --device cpu \
-  --mode RADAR \
+python examples/soccer/main_onnx.py `
+  --source_video_path examples/soccer/data/2e57b9_0.mp4 `
+  --target_video_path examples/soccer/data/out-onnx-radar.mp4 `
+  --device cpu `
+  --mode RADAR `
   --no_preview
 ```
 
----
-
-## 📂 Additional Resources
-
-* **`examples/soccer/README.md`** – Menjelaskan struktur contoh, cara menyiapkan data, dan perintah cepat untuk menjalankan demo.
-* **`examples/soccer/config.py`** – Menyimpan parameter default (mis. `DATA_ROOT`, `CONFIDENCE_THRESHOLD`). Anda dapat meng‑override dengan argumen CLI bila diperlukan.
-* **`examples/soccer/setup.sh`** – Skrip bash/PowerShell yang mengunduh model `.onnx` dan `.pt` ke folder `data/`. Jalankan dengan:
-  ```bash
-  bash examples/soccer/setup.sh   # Linux/macOS
-  # atau pada PowerShell
-  .\examples\soccer\setup.sh
-  ```
-* **Jupyter notebooks** (`examples/soccer/notebooks/…`) – Notebook untuk melatih masing‑masing detektor (player, ball, pitch). Buka dengan `jupyter notebook` dan pilih notebook yang diinginkan.
-
----
-
-## 🧪 Testing / Quick Verification
-
-Tidak ada suite tes terintegrasi, namun Anda dapat memverifikasi instalasi dengan satu perintah sederhana yang memanggil library:
-
-```bash
-python -c "import sports, importlib; print('sports version:', sports.__version__)"
-```
-Jika tidak terjadi error, instalasi berhasil. Untuk menjalankan contoh cepat (tanpa training), gunakan perintah `python main.py` sebagaimana dijelaskan pada bagian *Cara Menjalankan*.
-
----
-
-## 📂 Pilihan `--mode`
+Pilihan `--mode` yang tersedia pada kedua skrip:
 
 - `PITCH_DETECTION`
 - `PLAYER_DETECTION`
@@ -189,20 +160,16 @@ Jika tidak terjadi error, instalasi berhasil. Untuk menjalankan contoh cepat (ta
 
 ---
 
-## 📚 Datasets (Roboflow Universe)
+## ⚽ Datasets (Roboflow Universe)
 
-| Use Case | Dataset |
-| :--- | :--- |
-| ⚽ Soccer player detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-players-detection-3zvbc) |
-| ⚽ Soccer ball detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-ball-detection-rejhg) |
-| ⚽ Soccer pitch keypoint detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-field-detection-f07vi) |
+| Use Case                           | Dataset                                                                                                                                                          |
+| :--------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚽ Soccer player detection         | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-players-detection-3zvbc) |
+| ⚽ Soccer ball detection           | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-ball-detection-rejhg)    |
+| ⚽ Soccer pitch keypoint detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-field-detection-f07vi)   |
 
 ---
 
 ## 📄 Lisensi & Kredit
 
-Lisensi MIT (lihat file `LICENSE`).
-
-Mengikuti lisensi repository asli **[roboflow/sports](https://github.com/roboflow/sports/blob/main/LICENSE)**. Terima kasih kepada tim Roboflow atas library dan dataset open‑source‑nya.
-
----
+Mengikuti lisensi repository asli **[roboflow/sports](https://github.com/roboflow/sports/blob/main/LICENSE)**. Terima kasih kepada tim Roboflow atas library dan dataset open-source-nya.
