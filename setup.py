@@ -10,15 +10,15 @@ README = (HERE / "README.md").read_text(encoding="utf-8")
 setuptools.setup(
     name="sports",
     version='0.1.0',
-    python_requires=">=3.8",
-    description="",
+    python_requires=">=3.12",
+    description="Local Roboflow Sports helpers for football video analysis",
     long_description=README,
     long_description_content_type="text/markdown",
     url="https://github.com/roboflow/sports",
     author="Piotr Skalski",
     author_email="piotr.skalski92@gmail.com",
     license='MIT',
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(include=("sports", "sports.*")),
     include_package_data=True,
     install_requires=[
         "supervision",
@@ -27,15 +27,8 @@ setuptools.setup(
         "transformers",
         "umap-learn",
         "scikit-learn",
-        "tqdm",
-        "sentencepiece",
-        "protobuf"
+        "torch",
     ],
-    extras_require={
-        'tests': [
-            'pytest',
-        ]
-    },
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

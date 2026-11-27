@@ -1,47 +1,42 @@
 import argparse
+import sys
+from pathlib import Path
 
-import cv2
-import supervision as sv
-from tqdm import tqdm
+# Support the original direct script command as well as python -m examples.soccer.main.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from config import Mode
-from pipeline import analyze_video
+from src.config import Mode
+from src.processor import process_video
 
 
-def main(
-    source_video_path: str,
-    target_video_path: str,
-    device: str,
-    mode: Mode,
-    no_preview: bool,
-) -> None:
-    video_info = sv.VideoInfo.from_video_path(source_video_path)
-    frames = analyze_video(source_video_path=source_video_path, mode=mode, device=device)
+def main():
+    parser = argparse.ArgumentParser(description="Process a match with the Streamlit analysis pipeline.")
+    parser.add_argument("--source_video_path", type=Path, required=True)
+    parser.add_argument("--target_video_path", type=Path, required=True)
+    parser.add_argument("--device", choices=["cpu", "auto"], default="cpu")
+    parser.add_argument("--mode", type=Mode, choices=list(Mode), default=Mode.RADAR)
+    parser.add_argument("--no_preview", action="store_true")
+    args = parser.parse_args()
+    result = process_video(args.source_video_path, args.target_video_path, args.mode, device="cpu")
+    print(f"{result.frames_processed} frames in {result.total_seconds:.2f}s: {result.output_path}")
+    for warning in result.warnings:
+        print(warning)
+    if not args.no_preview:
+        import cv2
+        from contextlib import closing
+        from src.video import iter_frames, read_video_info
 
-    with sv.VideoSink(target_video_path, video_info) as sink:
-        for frame in tqdm(frames, total=video_info.total_frames, desc=f'Processing ({mode.value})'):
-            sink.write_frame(frame)
-            if not no_preview:
-                cv2.imshow('Soccer Analytics', frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-        if not no_preview:
+        delay = max(1, round(1000 / read_video_info(result.output_path).fps))
+        try:
+            with closing(iter_frames(result.output_path)) as frames:
+                for frame in frames:
+                    cv2.imshow("Soccer Analytics", frame)
+                    if cv2.waitKey(delay) & 0xFF == ord("q"):
+                        break
+        finally:
             cv2.destroyAllWindows()
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Soccer Analytics ONNX Runner')
-    parser.add_argument('--source_video_path', type=str, required=True)
-    parser.add_argument('--target_video_path', type=str, required=True)
-    parser.add_argument('--device', type=str, default='auto')
-    parser.add_argument('--mode', type=Mode, default=Mode.RADAR)
-    parser.add_argument('--no_preview', action='store_true')
-    args = parser.parse_args()
-
-    main(
-        source_video_path=args.source_video_path,
-        target_video_path=args.target_video_path,
-        device=args.device,
-        mode=args.mode,
-        no_preview=args.no_preview,
-    )
+if __name__ == "__main__":
+    main()

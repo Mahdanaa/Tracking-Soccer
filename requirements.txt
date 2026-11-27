@@ -1,0 +1,13 @@
+# Validated on Windows x64 with CPython 3.14.
+numpy==2.5.5
+opencv-python==5.1.0.95
+onnxruntime==1.32.0
+ultralytics==8.4.219
+supervision==0.30.9
+torch==2.15.0
+torchvision==0.29.2
+transformers==5.24.1
+umap-learn==0.6.0
+scikit-learn==1.9.1
+imageio-ffmpeg==0.8.1
+streamlit==1.67.0

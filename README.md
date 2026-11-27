@@ -1,117 +1,198 @@
 <div align="center">
-
-  <h1>⚽ soccer-cihuy</h1>
-
-  <p>
-    Kustomisasi dan optimasi modul analisis sepak bola berbasis
-    <a href="https://github.com/roboflow/sports"><strong>roboflow/sports</strong></a>
-    untuk GPU VRAM terbatas (4 GB) dan CPU-only (ONNX Runtime).
-  </p>
-
+  <h1>⚽ Soccer Tracking</h1>
+  <p>Deteksi pemain, pelacakan bola, dan minimap pertandingan sepak bola. Aplikasi Streamlit ini menjalankan tiga model ONNX secara lokal di CPU.</p>
 </div>
 
 ---
 
-## 🔗 Referensi Project Awal
+## 🔗 Referensi proyek
 
-Repository ini merupakan pengembangan/turunan dari project open-source **[roboflow/sports](https://github.com/roboflow/sports)** oleh **Roboflow**. Seluruh core library (`sports/`), konfigurasi lapangan, dan dataset awal merujuk pada repository upstream tersebut.
-
----
-
-## ✨ Tambahan & Perubahan di Repository Ini
-
-Dibandingkan repository asli `roboflow/sports`, terdapat beberapa file dan fitur tambahan:
-
-| File | Deskripsi |
-| :--- | :--- |
-| `examples/soccer/main_fast.py` | Runner teroptimasi untuk GPU VRAM 4 GB (mis. RTX 2050) dengan dukungan `--imgsz` (default `960`), `--no_preview`, dan `HomographySmoother` (EMA) untuk menstabilkan radar lapangan. |
-| `examples/soccer/main_onnx.py` | Runner ringan menggunakan model `YOLOv8s` format `.onnx` (`imgsz=640`) via ONNX Runtime agar bisa dijalankan di PC/CPU tanpa GPU. |
-| `PANDUAN_RETRAINING_KAGGLE_ONNX.md` | Panduan lengkap retraining 3 model bawaan (`YOLOv8x` `.pt`) menjadi `YOLOv8s` `.onnx` menggunakan Kaggle GPU. |
-| `check_env.py` | Skrip diagnosa environment lokal (Python, `nvidia-smi`, dependensi paket, PyTorch CUDA, serta pengecekan model & video sampel di `examples/soccer/data/`). |
+Proyek ini mengadaptasi Roboflow Sports untuk menganalisis rekaman pertandingan dan mengekspor hasilnya sebagai video MP4. Kode pendukung Roboflow ada di `sports/`, sedangkan alur analisis aplikasi ada di `src/`. [Roboflow Sports](https://github.com/roboflow/sports)
 
 ---
 
-## 💻 Instalasi
+## 📂 Struktur folder
 
-Gunakan lingkungan [**Python >= 3.8**](https://www.python.org/):
-
-```bash
-git clone https://github.com/Mahdanaa/soccer-cihuy.git
-cd soccer-cihuy
-pip install -e .
-pip install -r examples/soccer/requirements.txt
+```text ad
+Tracking-Soccer/
+├── app.py                                    # Antarmuka Streamlit
+├── requirements.txt                          # Versi dependensi aplikasi
+├── setup.py                                  # Metadata paket Python sports
+├── README.md                                 # Panduan instalasi dan penggunaan
+├── LICENSE                                   # Lisensi kode proyek
+├── .gitignore                                # Aturan untuk berkas lokal dan hasil analisis
+├── models/
+│   └── .gitkeep                              # Tempat tiga model ONNX dari tim
+├── samples/
+│   └── .gitkeep                              # Tempat video MP4 untuk pilihan Sample
+├── outputs/
+│   └── .gitkeep                              # Tempat hasil MP4 dan berkas sementara
+├── src/
+│   ├── __init__.py
+│   ├── config.py                             # Path, pilihan mode, warna, dan ambang
+│   ├── models.py                             # Memuat dan memvalidasi model ONNX
+│   ├── processor.py                          # Menjalankan analisis dan melaporkan progres
+│   ├── video.py                              # Membaca frame dan menulis output H.264
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── player.py                         # Deteksi manusia dan ID ByteTrack
+│   │   ├── ball.py                           # Deteksi, pelacakan, dan jejak bola
+│   │   ├── pitch.py                          # Deteksi landmark dan proyeksi minimap
+│   │   ├── team.py                           # Pengelompokan pemain dan kiper berdasarkan tim
+│   │   └── annotations.py                    # Kotak, label, ID, dan overlay pada video
+│   └── modes/
+│       ├── __init__.py                       # Menghubungkan nama mode ke fungsi pemrosesan
+│       ├── context.py                        # Data dan peringatan untuk satu analisis
+│       ├── pitch_detection.py
+│       ├── player_detection.py
+│       ├── ball_detection.py
+│       ├── player_tracking.py
+│       ├── team_classification.py
+│       ├── radar.py
+│       └── full_match_analysis.py
+├── sports/
+│   ├── __init__.py
+│   ├── common/
+│   │   ├── __init__.py
+│   │   ├── ball.py                           # Tracker dan jejak bola
+│   │   ├── team.py                           # Ekstraksi fitur jersey dengan SigLIP dan clustering
+│   │   └── view.py                           # Transformasi perspektif kamera
+│   ├── configs/
+│   │   ├── __init__.py
+│   │   └── soccer.py                         # Dimensi lapangan dan definisi 32 landmark
+│   └── annotators/
+│       ├── __init__.py
+│       └── soccer.py                         # Menggambar lapangan dan titik di minimap
+├── scripts/
+│   └── check_models.py                       # Diagnostik model dengan satu frame video
+└── examples/
+    └── soccer/
+        └── main.py                           # Menjalankan analisis lewat terminal
 ```
 
-> [!NOTE]
-> Jika ingin menjalankan `main_onnx.py`, pastikan `onnxruntime` sudah terpasang (`pip install onnxruntime`).
-
-### Cek Kesiapan Environment
-
-Jalankan skrip pengecekan sebelum memproses video:
-
-```bash
-python check_env.py
-```
+Git membawa `.gitkeep` agar folder `models/`, `samples/`, dan `outputs/` tersedia setelah clone. Simpan model, video masukan, dan hasil analisis di folder lokal masing-masing. Langkah instalasi di bawah akan membuat `.venv/` untuk Python dan library proyek.
 
 ---
 
-## 🚀 Cara Menjalankan
+## 💻 Instalasi setelah clone
 
-> [!IMPORTANT]
-> Folder `examples/soccer/data/` tidak ikut di-commit ke GitHub karena ukuran file model `.pt` (`> 130 MB`) dan video sampel cukup besar. Unduh model bawaan melalui `examples/soccer/setup.sh` atau latih model `.onnx` sendiri mengikuti [PANDUAN_RETRAINING_KAGGLE_ONNX.md](PANDUAN_RETRAINING_KAGGLE_ONNX.md).
+### 1. Siapkan Git dan Python
 
-### 1. Mode GPU Teroptimasi (`main_fast.py` — `.pt`)
+Gunakan **Windows x64 dan Python 3.14** untuk mengikuti perintah PowerShell di bawah. Setup proyek telah diuji pada Windows 11 dengan Python 3.14.5. Koneksi internet dibutuhkan untuk mengunduh dependensi dan menyiapkan cache SigLIP.
 
-Cocok untuk laptop/PC dengan GPU NVIDIA VRAM ~4 GB:
+```powershell
+git --version
+py -3.14 --version
+```
 
-```bash
-python examples/soccer/main_fast.py `
-  --source_video_path examples/soccer/data/08fd33_4.mp4 `
-  --target_video_path examples/soccer/data/out-fast-radar.mp4 `
-  --device cuda `
-  --mode RADAR `
-  --imgsz 960 `
+Jika `py` belum tersedia, jalankan `python --version`. Jika hasilnya Python 3.14, gunakan `python` untuk membuat virtual environment pada langkah 2. Unduh Git atau Python jika belum terpasang. [Git](https://git-scm.com/downloads) · [Python](https://www.python.org/downloads/)
+
+### 2. Clone dan buat virtual environment
+
+```powershell
+git clone --branch Mode https://github.com/Mahdanaa/Tracking-Soccer.git
+cd Tracking-Soccer
+py -3.14 -m venv .venv
+```
+
+Jika memakai `python` langsung, perintah untuk langkah terakhir adalah `python -m venv .venv`. Jalankan perintah selanjutnya dari folder yang berisi `app.py`.
+
+### 3. Instal dependensi
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
+```
+
+Perintah di atas langsung memakai Python dari `.venv`, jadi bisa dijalankan tanpa mengaktifkan environment. Untuk mengaktifkannya di PowerShell, jalankan `.\.venv\Scripts\Activate.ps1`. Setelah itu, Anda bisa memakai `python` sebagai pengganti `.\.venv\Scripts\python.exe`.
+
+`requirements.txt` sudah memasang Streamlit, ONNX Runtime, OpenCV, dan `imageio-ffmpeg` untuk ekspor MP4.
+
+### 4. Masukkan model ONNX dan siapkan video
+
+Salin tiga berkas ONNX yang disediakan oleh tim proyek ke `models/`. Pertahankan nama berkas agar aplikasi dapat menemukannya.
+
+| Berkas | Fungsi |
+|---|---|
+| `football-player-detection.onnx` | Mendeteksi pemain, kiper, wasit, dan bola. |
+| `football-ball-detection.onnx` | Detektor khusus bola. |
+| `football-pitch-detection.onnx` | Mendeteksi 32 landmark lapangan. |
+
+Ketiga model menggunakan input 640 × 640. Siapkan satu video pertandingan dalam format MP4. Anda bisa mengunggahnya dari komputer saat aplikasi terbuka atau menyalinnya ke `samples/` agar muncul sebagai pilihan **Sample**. Perintah contoh di README ini memakai nama `pertandingan.mp4`.
+
+### 5. Unduh SigLIP untuk mode yang memakai warna tim
+
+Jalankan sekali untuk memakai **Team Classification**, **Radar**, atau **Full Match Analysis**. Gunakan akun Windows yang sama dengan akun yang menjalankan aplikasi agar cache dapat dibaca. [Model SigLIP](https://huggingface.co/google/siglip-base-patch16-224)
+
+```powershell
+.\.venv\Scripts\hf.exe download google/siglip-base-patch16-224 config.json preprocessor_config.json model.safetensors
+```
+
+**Player Tracking**, **Player Detection**, **Ball Detection**, dan **Pitch Detection** bisa langsung dijalankan dengan model ONNX yang sesuai.
+
+---
+
+## 🚀 Cara menjalankan Streamlit
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+1. Buka alamat lokal yang tercetak di terminal, biasanya `http://localhost:8501`.
+2. Pilih **Upload** untuk mengunggah MP4 atau **Sample** untuk memilih video dari `samples/`. Batas unggahan adalah **200 MB**.
+3. Untuk percobaan pertama, pilih **Player Tracking** dan gunakan klip pendek. Klik **Start Analysis**.
+4. Setelah proses selesai, putar hasilnya di Streamlit atau klik **Download result** untuk menyimpan MP4. Video hasil memakai H.264 tanpa audio.
+5. Tekan **Ctrl+C** di terminal untuk menghentikan server.
+
+### Pilihan mode
+
+| Mode | Hasil |
+|---|---|
+| **Pitch Detection** | Menggambar landmark dan garis acuan lapangan. |
+| **Player Detection** | Menggambar kotak, kelas, dan confidence untuk pemain, kiper, wasit, serta bola. |
+| **Ball Detection** | Menampilkan posisi bola yang terdeteksi dan jejaknya. |
+| **Player Tracking** | Menampilkan ID pemain, kiper, dan wasit dengan ByteTrack. |
+| **Team Classification** | Mengelompokkan pemain berdasarkan jersey dan memberi warna tim. |
+| **Radar** | Menampilkan ID dan warna tim, serta memetakan posisi pemain ke minimap. |
+| **Full Match Analysis** | Menjalankan Radar sekaligus menampilkan jejak bola dan posisi bola pada minimap. |
+
+Jika kalibrasi lapangan gagal pada satu frame, Radar dan Full Match Analysis menyembunyikan minimap untuk frame itu. Ringkasan Streamlit mencatat jumlah frame yang terdampak.
+
+### Alternatif melalui terminal
+
+Simpan MP4 sebagai `samples/pertandingan.mp4`, atau ganti nilai `--source_video_path` dengan lokasi video Anda.
+
+```powershell
+.\.venv\Scripts\python.exe -m examples.soccer.main `
+  --source_video_path samples/pertandingan.mp4 `
+  --target_video_path outputs/pertandingan-tracking.mp4 `
+  --mode PLAYER_TRACKING `
   --no_preview
 ```
 
-### 2. Mode Ringan CPU / ONNX (`main_onnx.py` — `.onnx`)
+Gunakan nama output baru setiap analisis. Hapus `--no_preview` untuk membuka preview setelah proses selesai. Untuk melihat nama mode dan argumen lainnya, jalankan `.\.venv\Scripts\python.exe -m examples.soccer.main --help`.
 
-Membutuhkan 3 file model di `examples/soccer/data/`:
-- `football-player-detection.onnx`
-- `football-pitch-detection.onnx`
-- `football-ball-detection.onnx`
+---
 
-Jalankan dengan:
+## 🧪 Pemeriksaan cepat
 
-```bash
-python examples/soccer/main_onnx.py `
-  --source_video_path examples/soccer/data/2e57b9_0.mp4 `
-  --target_video_path examples/soccer/data/out-onnx-radar.mp4 `
-  --device cpu `
-  --mode RADAR `
-  --no_preview
+Jika video sudah ada di `samples/pertandingan.mp4`, perintah berikut memuat ketiga model dan menjalankan inferensi pada satu frame. Hasilnya menampilkan metadata, checksum, dan deteksi yang ditemukan.
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_models --video samples/pertandingan.mp4
 ```
 
-Pilihan `--mode` yang tersedia pada kedua skrip:
-- `PITCH_DETECTION`
-- `PLAYER_DETECTION`
-- `BALL_DETECTION`
-- `PLAYER_TRACKING`
-- `TEAM_CLASSIFICATION`
-- `RADAR`
+| Kendala | Langkah pemeriksaan |
+|---|---|
+| Model ONNX gagal dimuat | Cek nama berkas di `models/`. Diagnosis akan menunjukkan lokasi berkas dan konfigurasi yang diharapkan. |
+| Cache SigLIP belum lengkap | Ulangi perintah `hf download` dan pastikan cache diisi oleh akun Windows yang menjalankan aplikasi. |
+| Analisis CPU terasa lambat | Mulai dari klip pendek dengan Player Tracking. Full Match Analysis menjalankan model pemain, lapangan, dan beberapa potongan untuk deteksi bola pada setiap frame. |
+| Video gagal diputar atau disimpan | Pastikan MP4 masukan bisa didekode dan ada ruang tulis untuk berkas sementara di `outputs/`. |
 
 ---
 
-## ⚽ Datasets (Roboflow Universe)
+## 📚 Dataset, lisensi, dan kredit
 
-| Use Case | Dataset |
-| :--- | :--- |
-| ⚽ Soccer player detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-players-detection-3zvbc) |
-| ⚽ Soccer ball detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-ball-detection-rejhg) |
-| ⚽ Soccer pitch keypoint detection | [![Download Dataset](https://app.roboflow.com/images/download-dataset-badge.svg)](https://universe.roboflow.com/roboflow-jvuqo/football-field-detection-f07vi) |
+Model pemain, bola, dan lapangan merupakan hasil fine-tuning tim dari dataset Roboflow Universe. [Players v10](https://universe.roboflow.com/roboflow-jvuqo/football-players-detection-3zvbc) · [Ball v2](https://universe.roboflow.com/roboflow-jvuqo/football-ball-detection-rejhg) · [Field v12](https://universe.roboflow.com/roboflow-jvuqo/football-field-detection-f07vi)
 
----
-
-## 📄 Lisensi & Kredit
-
-Mengikuti lisensi repository asli **[roboflow/sports](https://github.com/roboflow/sports/blob/main/LICENSE)**. Terima kasih kepada tim Roboflow atas library dan dataset open-source-nya.
+Atribusi Roboflow Sports dan lisensi MIT kode proyek tercantum di `LICENSE`. Model YOLOv8s tim mencantumkan AGPL-3.0 dalam metadata. SigLIP memakai Apache-2.0. Periksa lisensi dataset dan hak distribusi rekaman sebelum membagikan video. [Lisensi proyek](LICENSE) · [Ultralytics](https://www.ultralytics.com/license) · [SigLIP](https://huggingface.co/google/siglip-base-patch16-224)

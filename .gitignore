@@ -108,7 +108,7 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -153,8 +153,21 @@ Desktop.ini
 *~
 .directory
 .Trash-*
-# Large models and sample videos
-examples/soccer/data/
+# Local weights, match footage and run artifacts
+/examples/soccer/data/
+*.onnx
+*.pt
+*.mp4
+*.avi
+*.mov
+/models/*
+!/models/.gitkeep
+/samples/*
+!/samples/.gitkeep
+/outputs/*
+!/outputs/.gitkeep
 
-# Large models and sample videos
-examples/soccer/data/
+# Local project notes and training materials
+/FOOTBALL_TRACKING_CODEX_IMPLEMENTATION.md
+/PANDUAN_RETRAINING_KAGGLE_ONNX.md
+/examples/soccer/notebooks/
