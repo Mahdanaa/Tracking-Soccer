@@ -1,10 +1,6 @@
 import argparse
-import sys
+from contextlib import closing
 from pathlib import Path
-
-# Support the original direct script command as well as python -m examples.soccer.main.
-if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.config import Mode
 from src.device import SUPPORTED_DEVICES
@@ -12,7 +8,7 @@ from src.processor import process_video
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Process a match with the Streamlit analysis pipeline.")
+    parser = argparse.ArgumentParser(description="Run football video analysis from the command line.")
     parser.add_argument("--source_video_path", type=Path, required=True)
     parser.add_argument("--target_video_path", type=Path, required=True)
     parser.add_argument("--device", choices=list(SUPPORTED_DEVICES), default="auto")
@@ -25,7 +21,6 @@ def main():
         print(warning)
     if not args.no_preview:
         import cv2
-        from contextlib import closing
         from src.video import iter_frames, read_video_info
 
         delay = max(1, round(1000 / read_video_info(result.output_path).fps))

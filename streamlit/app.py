@@ -1,15 +1,15 @@
-import time
 import streamlit as st
-from config import API_BASE_URL
-from services.api_service import (
-    BackendError,
+from service import (
+    AnalysisError,
     download_file,
+    get_engine_status,
     get_history,
     get_results,
     get_status,
+    run_analysis,
     submit_video,
 )
-from utils.validators import validate_video
+from validators import validate_video
 
 st.set_page_config(
     page_title="Football Player Tracking",
@@ -78,7 +78,6 @@ section[data-testid="stSidebar"] {
 _LOGO_SVG = '<svg width="30" height="22" viewBox="0 0 28 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="26" height="18" rx="3" stroke="#22C55E" stroke-width="1.6"/><line x1="14" y1="1" x2="14" y2="19" stroke="#22C55E" stroke-width="1.2"/><circle cx="14" cy="10" r="4" stroke="#22C55E" stroke-width="1.2"/><circle cx="14" cy="10" r="1.2" fill="#22C55E"/></svg>'
 
 STATUS_LABELS = {
-    "uploading": "Mengunggah",
     "queued": "Dalam Antrean",
     "processing": "Sedang Diproses",
     "completed": "Selesai",
@@ -109,8 +108,8 @@ def render_sidebar():
     is_dash = st.session_state.nav_page == "Dashboard" and st.session_state.workflow_view is None
     is_hist = st.session_state.nav_page == "Riwayat" and st.session_state.workflow_view is None
 
-    dot_color = "#22C55E" if API_BASE_URL else "#FF6B57"
-    pill_label = "Backend terhubung" if API_BASE_URL else "Backend belum diatur"
+    engine_ok, pill_label = get_engine_status()
+    dot_color = "#22C55E" if engine_ok else "#FF6B57"
 
     with st.sidebar:
         st.markdown(
@@ -201,7 +200,7 @@ def show_dashboard():
                 st.session_state.uploaded_filename = uploaded_file.name
                 st.session_state.workflow_view = "processing"
                 st.rerun()
-            except BackendError as e:
+            except AnalysisError as e:
                 st.error(str(e))
 
 
@@ -220,17 +219,9 @@ def show_processing():
         st.write(f"**File:** {st.session_state.uploaded_filename}")
     st.write(f"**ID Analisis:** `{analysis_id}`")
 
-    col_back, col_refresh, _ = st.columns([1, 1, 3])
-    with col_back:
-        if st.button("Kembali ke Dashboard"):
-            reset_to_dashboard()
-            st.rerun()
-    with col_refresh:
-        refresh_now = st.button("Perbarui Status")
-
     try:
         status_data = get_status(analysis_id)
-    except BackendError as e:
+    except AnalysisError as e:
         st.error(str(e))
         return
 
@@ -239,27 +230,45 @@ def show_processing():
     progress = status_data.get("progress")
     error_message = status_data.get("error") or status_data.get("message")
 
+    col_back, col_refresh, _ = st.columns([1, 1, 3])
+    with col_back:
+        if st.button("Kembali ke Dashboard"):
+            reset_to_dashboard()
+            st.rerun()
+    with col_refresh:
+        st.button("Perbarui Status", disabled=raw_status in ("queued", "processing"))
+
     st.subheader(f"Status: {label}")
 
-    if isinstance(progress, (int, float)):
-        norm_progress = progress / 100.0 if progress > 1 else float(progress)
-        norm_progress = max(0.0, min(1.0, norm_progress))
-        st.progress(norm_progress, text=f"{int(norm_progress * 100)}%")
+    if raw_status in ("queued", "processing"):
+        phase_text = st.empty()
+        progress_bar = st.progress(0.0, text="Memulai analisis...")
 
-    if raw_status in ("uploading", "queued", "processing"):
-        st.info("Analisis sedang berjalan di backend. Halaman akan diperbarui otomatis.")
-        if not refresh_now:
-            time.sleep(5)
+        def on_progress(phase: str, done: int, total: int) -> None:
+            phase_text.info(f"Tahap: **{phase}**")
+            if phase == "Processing frames" and total:
+                ratio = max(0.0, min(1.0, done / total))
+                progress_bar.progress(ratio, text=f"{done} / {total} frame ({int(ratio * 100)}%)")
+
+        try:
+            run_analysis(analysis_id, progress_callback=on_progress)
             st.rerun()
+        except AnalysisError as e:
+            progress_bar.empty()
+            st.error(str(e))
     elif raw_status == "completed":
+        if isinstance(progress, (int, float)):
+            norm_progress = progress / 100.0 if progress > 1 else float(progress)
+            norm_progress = max(0.0, min(1.0, norm_progress))
+            st.progress(norm_progress, text=f"{int(norm_progress * 100)}%")
         st.success("Analisis selesai! Silakan buka hasil analisis.")
         if st.button("Lihat Hasil", type="primary"):
             st.session_state.workflow_view = "results"
             st.rerun()
     elif raw_status == "failed":
-        st.error(error_message or "Analisis gagal diproses oleh backend.")
+        st.error(error_message or "Analisis gagal diproses.")
     else:
-        st.warning(f"Status tidak dikenali dari backend: `{raw_status}`")
+        st.warning(f"Status tidak dikenali: `{raw_status}`")
 
 
 def show_results():
@@ -281,76 +290,44 @@ def show_results():
 
     try:
         result = get_results(analysis_id)
-    except BackendError as e:
+    except AnalysisError as e:
         st.error(str(e))
         return
 
-    video_url = result.get("video_url")
-    radar_url = result.get("radar_url")
+    video_path = result.get("video_path")
     summary = result.get("summary") or {}
     status = result.get("status")
 
-    col_video, col_radar = st.columns(2, gap="medium")
-
-    with col_video:
-        st.subheader("Video Pertandingan Teranotasi")
-        if video_url:
-            st.video(video_url)
-            try:
-                video_bytes = download_file(video_url)
-                st.download_button(
-                    "Unduh Video Teranotasi",
-                    data=video_bytes,
-                    file_name=f"{analysis_id}_annotated.mp4",
-                    mime="video/mp4",
-                )
-            except BackendError as e:
-                st.warning(str(e))
-        else:
-            st.info("Video teranotasi tidak tersedia dari backend.")
-
-    with col_radar:
-        st.subheader("Visualisasi Radar")
-        if radar_url:
-            if str(radar_url).lower().endswith((".png", ".jpg", ".jpeg")):
-                st.image(radar_url, use_container_width=True)
-                file_ext = "png"
-                mime = "image/png"
-            else:
-                st.video(radar_url)
-                file_ext = "mp4"
-                mime = "video/mp4"
-            try:
-                radar_bytes = download_file(radar_url)
-                st.download_button(
-                    "Unduh Output Radar",
-                    data=radar_bytes,
-                    file_name=f"{analysis_id}_radar.{file_ext}",
-                    mime=mime,
-                )
-            except BackendError as e:
-                st.warning(str(e))
-        else:
-            st.info("Output radar tidak tersedia dari backend.")
-
-    if video_url and radar_url:
-        st.caption(
-            "Catatan: Video dan radar ditampilkan berdampingan; sinkronisasi frame otomatis "
-            "hanya tersedia jika backend menyertakan metadata waktu."
-        )
+    st.subheader("Video Pertandingan Teranotasi & Minimap Radar 2D")
+    if video_path:
+        st.video(video_path)
+        try:
+            video_bytes = download_file(video_path)
+            st.download_button(
+                "Unduh Video Hasil",
+                data=video_bytes,
+                file_name=f"{analysis_id}_annotated.mp4",
+                mime="video/mp4",
+            )
+        except AnalysisError as e:
+            st.warning(str(e))
+    else:
+        st.info("Video teranotasi tidak tersedia.")
 
     st.divider()
     st.subheader("Ringkasan Pertandingan")
 
     metrics = []
-    if "total_players" in summary:
-        metrics.append(("Total Pemain Terlacak", summary["total_players"]))
-    if "total_teams" in summary:
-        metrics.append(("Jumlah Tim", summary["total_teams"]))
-    if "ball_detected" in summary:
-        metrics.append(("Bola Terdeteksi", "Ya" if summary["ball_detected"] else "Tidak"))
+    if "frames_processed" in summary:
+        metrics.append(("Total Frame", summary["frames_processed"]))
+    if "processing_fps" in summary:
+        metrics.append(("Kecepatan (FPS)", summary["processing_fps"]))
+    if "total_seconds" in summary:
+        metrics.append(("Waktu Proses (detik)", summary["total_seconds"]))
     if "duration" in summary:
-        metrics.append(("Durasi (detik)", summary["duration"]))
+        metrics.append(("Durasi Video (detik)", summary["duration"]))
+    if "device" in summary:
+        metrics.append(("Perangkat", summary["device"]))
     if status:
         metrics.append(("Status", STATUS_LABELS.get(str(status).lower(), str(status))))
 
@@ -368,7 +345,7 @@ def show_history():
     try:
         data = get_history()
         analyses = data.get("analyses", [])
-    except BackendError as e:
+    except AnalysisError as e:
         st.warning(str(e))
         return
 
@@ -395,7 +372,7 @@ def show_history():
                     st.session_state.uploaded_filename = filename
                     st.session_state.workflow_view = "results"
                     st.rerun()
-            elif raw_status in ("uploading", "queued", "processing") and aid != "-":
+            elif raw_status in ("queued", "processing") and aid != "-":
                 if c5.button("Pantau", key=f"proc_{aid}", use_container_width=True):
                     st.session_state.analysis_id = aid
                     st.session_state.uploaded_filename = filename

@@ -7,49 +7,18 @@ import supervision as sv
 
 
 class BallAnnotator:
-    """
-    A class to annotate frames with circles of varying radii and colors.
-
-    Attributes:
-        radius (int): The maximum radius of the circles to be drawn.
-        buffer (deque): A deque buffer to store recent coordinates for annotation.
-        color_palette (sv.ColorPalette): A color palette for the circles.
-        thickness (int): The thickness of the circle borders.
-    """
-
     def __init__(self, radius: int, buffer_size: int = 5, thickness: int = 2):
-
         self.color_palette = sv.ColorPalette.from_matplotlib('jet', buffer_size)
         self.buffer = deque(maxlen=buffer_size)
         self.radius = radius
         self.thickness = thickness
 
     def interpolate_radius(self, i: int, max_i: int) -> int:
-        """
-        Interpolates the radius between 1 and the maximum radius based on the index.
-
-        Args:
-            i (int): The current index in the buffer.
-            max_i (int): The maximum index in the buffer.
-
-        Returns:
-            int: The interpolated radius.
-        """
         if max_i == 1:
             return self.radius
         return int(1 + i * (self.radius - 1) / (max_i - 1))
 
     def annotate(self, frame: np.ndarray, detections: sv.Detections) -> np.ndarray:
-        """
-        Annotates the frame with circles based on detections.
-
-        Args:
-            frame (np.ndarray): The frame to annotate.
-            detections (sv.Detections): The detections containing coordinates.
-
-        Returns:
-            np.ndarray: The annotated frame.
-        """
         xy = detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER).astype(int)
         self.buffer.append(xy)
         for i, xy in enumerate(self.buffer):

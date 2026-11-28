@@ -11,6 +11,7 @@ CONTRACTS = {
     "ball": ("detect", {0: "ball"}, 5),
     "pitch": ("pose", {0: "pitch"}, 101),
 }
+_MODEL_CACHE: dict[tuple[str, str, str], tuple[object, dict]] = {}
 
 
 def validate_session(name, session, runtime: RuntimeDevice | None = None) -> dict:
@@ -63,6 +64,15 @@ class ModelStore:
         path = self.directory / f"football-{name}-detection.onnx"
         if not path.is_file():
             raise FileNotFoundError(f"Place the original {name} model at {path}")
+        cache_key = (str(path), name, self.runtime.key)
+        cached = _MODEL_CACHE.get(cache_key)
+        if cached is not None:
+            predictor, details = cached
+            if details["warning"]:
+                self.warnings.append(details["warning"])
+            self.details[name] = details
+            self.predictors[name] = predictor
+            return predictor
         if not self._preloaded:
             preload_gpu_libraries(self.runtime)
             self._preloaded = True
@@ -77,6 +87,7 @@ class ModelStore:
         predictor = predictor_type(overrides=options)
         predictor.setup_model(str(path), verbose=False)
         details = validate_session(name, predictor.model.session, self.runtime)
+        _MODEL_CACHE[cache_key] = (predictor, details)
         if details["warning"]:
             self.warnings.append(details["warning"])
         self.details[name] = details

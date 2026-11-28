@@ -1,3 +1,4 @@
+from functools import lru_cache
 from itertools import batched
 
 import numpy as np
@@ -10,17 +11,23 @@ from transformers import AutoImageProcessor, SiglipVisionModel
 SIGLIP_MODEL_PATH = "google/siglip-base-patch16-224"
 
 
+@lru_cache(maxsize=2)
+def _load_siglip(device: str):
+    try:
+        processor = AutoImageProcessor.from_pretrained(SIGLIP_MODEL_PATH, local_files_only=True)
+        model = SiglipVisionModel.from_pretrained(
+            SIGLIP_MODEL_PATH, local_files_only=True
+        ).to(device).eval()
+        return processor, model
+    except OSError as error:
+        raise RuntimeError(f"SigLIP cache incomplete. Run the README setup for {SIGLIP_MODEL_PATH}.") from error
+
+
 class TeamClassifier:
     def __init__(self, device: str = "cpu", batch_size: int = 16):
         self.device = device
         self.batch_size = batch_size
-        try:
-            self.processor = AutoImageProcessor.from_pretrained(SIGLIP_MODEL_PATH, local_files_only=True)
-            self.features_model = SiglipVisionModel.from_pretrained(
-                SIGLIP_MODEL_PATH, local_files_only=True
-            ).to(device).eval()
-        except OSError as error:
-            raise RuntimeError(f"SigLIP cache incomplete. Run the README setup for {SIGLIP_MODEL_PATH}.") from error
+        self.processor, self.features_model = _load_siglip(device)
         self.reducer = umap.UMAP(n_components=3, random_state=42, n_jobs=1)
         self.cluster_model = KMeans(n_clusters=2, random_state=42, n_init=10)
 
